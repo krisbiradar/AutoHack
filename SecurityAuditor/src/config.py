@@ -19,7 +19,7 @@ class AuditorConfig:
 
     @property
     def all_target_ips(self) -> Iterator[str]:
-     start_ip = "21.1.1.1" # Default start
+     start_ip = "1.1.1.1" # Default start
      
      # Check if the raw config mapping has a resume_ip to use instead
      if hasattr(self, '_raw_targets') and self._raw_targets.get('resume_ip'):
@@ -27,7 +27,7 @@ class AuditorConfig:
          logging.info(f"Resuming scan from previously interrupted IP: {start_ip}")
          
      start = int(ipaddress.IPv4Address(start_ip))
-     end = int(ipaddress.IPv4Address("21.1.1.5"))
+     end = int(ipaddress.IPv4Address("255.255.255.255"))
 
      for ip_int in range(start, end + 1):
         yield str(ipaddress.IPv4Address(ip_int))
