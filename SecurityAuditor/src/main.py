@@ -40,44 +40,64 @@ async def run_scan_cycle(config):
    
     all_findings = []
     
-    for host in target_ips:
-        scan_id = await storage.log_scan_run(f"{scanned_ct} hosts scanned")
-        open_ports = await scanner.scan_host(host, ports)
-        for port, banner in open_ports.items():
-            service_name = detector.identify_service(port, banner)
-            logging.info(f"[{host}:{port}] Detected possible service: {service_name}")
-            
-            # Check if we have a plugin for this service
-            plugin = plugin_loader.get_plugin(service_name)
-            if plugin:
-                # Run the audit
-                finding = await plugin.audit(host, port)
+    import yaml
+    try:
+        for host in target_ips:
+            scan_id = await storage.log_scan_run(f"{scanned_ct} hosts scanned so far...")
+            open_ports = await scanner.scan_host(host, ports)
+            for port, banner in open_ports.items():
+                service_name = detector.identify_service(port, banner)
+                logging.info(f"[{host}:{port}] Detected possible service: {service_name}")
                 
-                # Log if it's vulnerable
-                if finding["status"] == "vulnerable":
-                    logging.warning(f"[{host}:{port} - {service_name}] VULNERABILITY FOUND: {finding['risk_level'].upper()} - {finding['details']}")
+                # Check if we have a plugin for this service
+                plugin = plugin_loader.get_plugin(service_name)
+                if plugin:
+                    # Run the audit
+                    finding = await plugin.audit(host, port)
                     
-                    if finding['risk_level'] == "high":
-                        reporter.send_alert(f"[{host}:{port}] {service_name} - {finding['details']}", level="high")
-                    
-                    # Store finding
-                    all_findings.append({
-                        "host": host,
-                        "port": port,
-                        "service": service_name,
-                        "risk_level": finding["risk_level"],
-                        "details": finding["details"]
-                    })
-                    await storage.log_vulnerability(
-                        scan_id, host, port, service_name, 
-                        finding["risk_level"], finding["details"]
-                    )
-            scanned_ct += 1
-    # Generate JSON Report
-    reporter.generate_json_report(scan_id, all_findings)
-    
-    elapsed = time.time() - start_time
-    logging.info(f"Scan cycle {scan_id} completed in {elapsed:.2f} seconds. Found {len(all_findings)} issues.")
+                    # Log if it's vulnerable
+                    if finding["status"] == "vulnerable":
+                        logging.warning(f"[{host}:{port} - {service_name}] VULNERABILITY FOUND: {finding['risk_level'].upper()} - {finding['details']}")
+                        
+                        if finding['risk_level'] == "high":
+                            reporter.send_alert(f"[{host}:{port}] {service_name} - {finding['details']}", level="high")
+                        
+                        # Store finding
+                        all_findings.append({
+                            "host": host,
+                            "port": port,
+                            "service": service_name,
+                            "risk_level": finding["risk_level"],
+                            "details": finding["details"]
+                        })
+                        await storage.log_vulnerability(
+                            scan_id, host, port, service_name, 
+                            finding["risk_level"], finding["details"]
+                        )
+                scanned_ct += 1
+        # Generate JSON Report
+        reporter.generate_json_report(scan_id, all_findings)
+        
+        elapsed = time.time() - start_time
+        logging.info(f"Scan cycle {scan_id} completed in {elapsed:.2f} seconds. Found {len(all_findings)} issues.")
+        
+    except KeyboardInterrupt:
+        logging.warning(f"Scan interrupted by user at IP {host}. Updating config to resume from here later.")
+        
+        config_path = "config.yaml"
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                data = yaml.safe_load(f)
+            
+            # Save the resume IP into the targets dict
+            if "targets" not in data:
+                data["targets"] = {}
+            data["targets"]["resume_ip"] = host
+            
+            with open(config_path, "w") as f:
+                yaml.dump(data, f)
+                
+        raise # Re-raise to exit the daemon loop
 
 async def daemon_loop(config_path: str = "config.yaml"):
     """
