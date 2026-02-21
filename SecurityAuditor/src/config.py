@@ -19,8 +19,8 @@ class AuditorConfig:
 
     @property
     def all_target_ips(self) -> Iterator[str]:
-     start = int(ipaddress.IPv4Address("22.22.1.1"))
-     end = int(ipaddress.IPv4Address("22.22.1.254"))
+     start = int(ipaddress.IPv4Address("1.1.1.1"))
+     end = int(ipaddress.IPv4Address("255.255.255.255"))
 
      for ip_int in range(start, end + 1):
         yield str(ipaddress.IPv4Address(ip_int))
