@@ -13,19 +13,14 @@ class AuditorConfig:
     json_output_path: str
     target_hosts: List[str]
     target_networks: List[str]
+    resume_ip: str
     full_scan: bool
     common_ports: List[int]
     capabilities: Dict[str, bool]
 
     @property
     def all_target_ips(self) -> Iterator[str]:
-     start_ip = "1.1.1.1" # Default start
-     
-     # Check if the raw config mapping has a resume_ip to use instead
-     if hasattr(self, '_raw_targets') and self._raw_targets.get('resume_ip'):
-         start_ip = self._raw_targets.get('resume_ip')
-         logging.info(f"Resuming scan from previously interrupted IP: {start_ip}")
-         
+     start_ip = self.resume_ip if self.resume_ip else "1.1.1.1" # Default start
      start = int(ipaddress.IPv4Address(start_ip))
      end = int(ipaddress.IPv4Address("255.255.255.255"))
 
@@ -43,7 +38,7 @@ def setup_logging(level_name: str):
         force=True,
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler("logs/auditor.log")
+            logging.FileHandler(f"logs/auditor{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
         ]
     )
 
@@ -68,6 +63,7 @@ def load_config(config_path: str = "config.yaml") -> AuditorConfig:
         database_path=storage_conf.get("database_path", "data/auditor.db"),
         json_output_path=reporting_conf.get("json_output_path", "data/reports/"),
         target_hosts=targets_conf.get("hosts", []),
+        resume_ip=targets_conf.get("resume_ip", "1.1.1.1"),
         target_networks=targets_conf.get("networks", []),
         full_scan=scanner_conf.get("full_scan", False),
         common_ports=scanner_conf.get("common_ports", [22, 80, 443, 3389, 5432, 27017, 6379]),
