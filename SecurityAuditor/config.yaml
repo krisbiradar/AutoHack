@@ -16,6 +16,7 @@ targets:
     # - "192.168.1.0/24"
   hosts:
     - "localhost"
+  resume_ip: "1.1.16.179"
 
 scanner:
   # Ports to scan. If full_scan is true, all 65535 ports are scanned (slower)
