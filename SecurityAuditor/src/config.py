@@ -66,7 +66,7 @@ def load_config(config_path: str = "config.yaml") -> AuditorConfig:
         resume_ip=targets_conf.get("resume_ip", "1.1.1.1"),
         target_networks=targets_conf.get("networks", []),
         full_scan=scanner_conf.get("full_scan", False),
-        common_ports=scanner_conf.get("common_ports", [22, 80, 443, 3389, 5432, 27017, 6379]),
+        common_ports=scanner_conf.get("common_ports", [1433, 3306, 5432, 6379, 8080, 27017]),
         capabilities=caps_conf
     )
     

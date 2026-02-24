@@ -42,39 +42,58 @@ async def run_scan_cycle(config):
     
     import yaml
     try:
-        for host in target_ips:
-            scan_id = await storage.log_scan_run(f"{scanned_ct} hosts scanned so far...")
-            open_ports = await scanner.scan_host(host, ports)
-            for port, banner in open_ports.items():
-                service_name = detector.identify_service(port, banner)
-                logging.info(f"[{host}:{port}] Detected possible service: {service_name}")
-                
-                # Check if we have a plugin for this service
-                plugin = plugin_loader.get_plugin(service_name)
-                if plugin:
-                    # Run the audit
-                    finding = await plugin.audit(host, port)
+        scan_id = await storage.log_scan_run("Starting async scan cycle...")
+        
+        async def process_host(target_host):
+            nonlocal scanned_ct
+            try:
+                open_ports = await scanner.scan_host(target_host, ports)
+                for port, banner in open_ports.items():
+                    service_name = detector.identify_service(port, banner)
+                    logging.info(f"[{target_host}:{port}] Detected possible service: {service_name}")
                     
-                    # Log if it's vulnerable
-                    if finding["status"] == "vulnerable":
-                        logging.warning(f"[{host}:{port} - {service_name}] VULNERABILITY FOUND: {finding['risk_level'].upper()} - {finding['details']}")
+                    # Check if we have a plugin for this service
+                    plugin = plugin_loader.get_plugin(service_name)
+                    if plugin:
+                        # Run the audit
+                        finding = await plugin.audit(target_host, port)
                         
-                        if finding['risk_level'] == "high":
-                            reporter.send_alert(f"[{host}:{port}] {service_name} - {finding['details']}", level="high")
-                        
-                        # Store finding
-                        all_findings.append({
-                            "host": host,
-                            "port": port,
-                            "service": service_name,
-                            "risk_level": finding["risk_level"],
-                            "details": finding["details"]
-                        })
-                        await storage.log_vulnerability(
-                            scan_id, host, port, service_name, 
-                            finding["risk_level"], finding["details"]
-                        )
+                        # Log if it's vulnerable
+                        if finding["status"] == "vulnerable":
+                            logging.warning(f"[{target_host}:{port} - {service_name}] VULNERABILITY FOUND: {finding['risk_level'].upper()} - {finding['details']}")
+                            
+                            if finding['risk_level'] == "high":
+                                reporter.send_alert(f"[{target_host}:{port}] {service_name} - {finding['details']}", level="high")
+                            
+                            # Store finding
+                            all_findings.append({
+                                "host": target_host,
+                                "port": port,
+                                "service": service_name,
+                                "risk_level": finding["risk_level"],
+                                "details": finding["details"]
+                            })
+                            await storage.log_vulnerability(
+                                scan_id, target_host, port, service_name, 
+                                finding["risk_level"], finding["details"]
+                            )
+            except Exception as e:
+                logging.error(f"Error scanning {target_host}: {e}")
+            finally:
                 scanned_ct += 1
+
+        tasks = set()
+        host = None # Default in case target_ips is exhausted
+        for h in target_ips:
+            host = h # Keep track of last dispatched host for KeyboardInterrupt
+            # Enforce 250 IPs per second => sleep 1/250 seconds
+            await asyncio.sleep(1.0 / 250.0)
+            task = asyncio.create_task(process_host(host))
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         # Generate JSON Report
         reporter.generate_json_report(scan_id, all_findings)
         
